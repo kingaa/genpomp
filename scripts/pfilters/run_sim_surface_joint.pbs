@@ -1,0 +1,39 @@
+####  PBS preamble
+
+#PBS -A kingaa_flux
+#PBS -l qos=flux
+#PBS -q flux
+#PBS -M alxsmth@umich.edu
+#PBS -m abe
+#PBS -V
+#PBS -o flux_out/$PBS_JOBID.stdout
+#PBS -e flux_out/$PBS_JOBID.stderr
+
+export OMP_NUM_THREADS=$PBS_NP
+export OMP_SCHEDULE="dynamic"
+
+echo $PBS_O_WORKDIR
+cd $PBS_O_WORKDIR
+
+####  End PBS preamble
+
+JOBNAME=$PBS_JOBNAME
+SCRIPT=pfilter.R
+HOST=`hostname -s`
+DATESTR=`date -u +%Y-%m-%d-%H-%M-%S`
+
+##Print out some info about the node
+hwloc-calc --intersect PU -p $(hwloc-bind --get)
+pbsnodes $HOST
+
+## Create path to stem based on job id
+STEM=/nfs/kinglab/alxsmth/genpomp_versions/genetic_ll_only/genpomp/Rworkflows/scripts/surfaces/param_files/reproducible_both/params_
+PARAMS=$STEM$PBS_ARRAYID
+
+## Put your job commands after this line
+##hwloc-bind socket:0 
+Rscript --vanilla pfilter2.R --data_file=/nfs/kinglab/alxsmth/phylodynamics/simulated/20/seqs_20.13_.txt --usermodel_dir=ehi_aids --params_file=$PARAMS --result_dir=$RESDIR --n_reps=$NREPS --n_threads=$NTHREADS --n_nested=5 --n_branch_samples=10 --n_particles=$NP --environment=flux --reproducible &
+
+wait
+
+

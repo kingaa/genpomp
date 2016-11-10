@@ -1,0 +1,34 @@
+OBJECTS = basenode.o node.o gnode.o substmodel.o peel.o userUnif.o RngStream.o io.o reduceSeqs.o 
+INCLUDEDIRS = $(shell R CMD config --cppflags) $(shell pkg-config --cflags libRmath libR) 
+INCLUDEDIRS += -I. #-I../../src/models/$(usermodelDirectory)
+#INCLUDEDIRS += -I$(MKL_INC)
+CCFLAGS = -g -DDEBUG  #-m64 -I${MKLROOT}/include
+CCFLAGS += $(CMD_LINE_FLAGS)
+CFLAGS = -std=gnu99 -fpic -g
+CFLAGS += $(CMD_LINE_FLAGS) 
+LFLAGS = $(shell R CMD config --ldflags) -lgfortran -lquadmath 
+LFLAGS += $(shell R CMD config LAPACK_LIBS)
+LFLAGS += $(shell R CMD config BLAS_LIBS)
+LFLAGS += $(shell pkg-config --libs libRmath)
+#LFLAGS += -lgfortran -lquadmath 
+LFLAGS += $(shell pkg-config --libs libR)
+#LFLAGS += -lgfortran -lquadmath -lR
+CXX = icpc -mkl #-fp-model precise #-fp-trap="invalid,divzero,underflow,overflow"
+CC = icc -mkl #-fp-model precise #-fp-trap="invalid,divzero,underflow,overflow"
+#GXX = g++
+#GCC =  gcc
+
+%.exe: %.cc 
+	make $(OBJECTS)
+	$(CXX) -o $*.exe $*.cc $(OBJECTS) $(INCLUDEDIRS) $(CCFLAGS) $(LFLAGS) 
+
+%.o: %.cc
+	$(CXX) $(CCFLAGS) -c $*.cc $(INCLUDEDIRS) -o $*.o
+
+%.o: %.c
+	$(CC) $(CFLAGS) $(INCLUDEDIRS) -c $*.c -o $*.o
+
+clean:
+	$(RM) *.o *.exe *.pdf *.tre *~
+
+
