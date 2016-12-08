@@ -16,6 +16,8 @@
 #include "gnode.h"
 #include "substmodel.h"
 #include "type_defs.h"
+#include "gsl_rng.h"
+#include "gsl_randist.h"
 
 #define NO_SEQ (-1)
 
@@ -56,7 +58,7 @@ public:
 		_ids() {
     // Set the first node in the gene tree
     _gtree.push_back(gnode(MOTHER_EVE, 0));
-}
+  }
 
   // Constructor
   tree (substModel model, 
@@ -373,7 +375,8 @@ public:
 	      with a mean equal to the branch length in calendar time. 
     OUTPUT: The length of the random branch
   */
-  double gamma_branch(vector<gnode> & gtree,
+  double gamma_branch(gsl_rng * rngptr, 
+		      vector<gnode> & gtree,
 		      map<string, double> & params, 
 		      gnode_index new_leaf)
   {
@@ -394,20 +397,17 @@ public:
       // Otherwise scale the calender branch length by multiplying by a gamma
       // random variable with mean one
       double evo_branch;
-#ifdef REPRODUCIBLE
-#pragma omp critical
-      {
-      evo_branch = rgamma(time_branch / params["relax_branch"],
-			  params["relax_branch"]);
+
+      if(time_branch == 0) {
+	evo_branch = 0;
+      } else {
+	evo_branch = gsl_ran_gamma(rngptr,
+				   time_branch / params["relax_branch"],
+				   params["relax_branch"]);
       }
-#else
-      evo_branch = rgamma(time_branch / params["relax_branch"],
-			  params["relax_branch"]);
-#endif
       evo_branch += params["fixed_stem"];
       gtree.at(new_leaf).evo_branch_length(evo_branch);
       return evo_branch;
-      
     }
   }
 
@@ -455,7 +455,8 @@ public:
 	      the two new edges according to a beta distribution. 
     OUTPUT: none
   */
-  void beta_bridge(vector<gnode> & gtree,
+  void beta_bridge(gsl_rng * rngptr, 
+		   vector<gnode> & gtree,
 		   map<string, double> & params, 
 		   gnode_index top) 
   {
@@ -478,21 +479,36 @@ public:
 
     } else {
 
-      // Otherwise we have a nondegenerate beta bridge
-      double proportion;
-#ifdef REPRODUCIBLE
-#pragma omp critical
-      {
-      proportion = rbeta(branch_one / params["relax_branch"],
-				branch_two / params["relax_branch"]);    
+      double evo_branch_one;
+      double evo_branch_two;
+
+      if(branch_one == 0 & branch_two == 0){
+
+	evo_branch_one = 0;
+	evo_branch_two = 0;
+
+      } else if(branch_one == 0) {
+
+	evo_branch_one = 0;
+	evo_branch_two = evo_branch;
+
+      } else if (branch_two == 0) {
+
+	evo_branch_one = evo_branch;
+	evo_branch_two = 0;
+
+      } else {
+	
+	// Otherwise we have a nondegenerate beta bridge
+	double proportion;
+	proportion = gsl_ran_beta(rngptr,
+				  branch_one / params["relax_branch"],
+				  branch_two / params["relax_branch"]);    
+	evo_branch_one = proportion * evo_branch;
+	evo_branch_two = (1 - proportion) * evo_branch;
+	
       }
-#else
-      proportion = rbeta(branch_one / params["relax_branch"],
-				branch_two / params["relax_branch"]);    
-#endif
-      double evo_branch_one = proportion * evo_branch;
-      double evo_branch_two = (1 - proportion) * evo_branch;
-      
+
       // Write evolutionary branch lengths
       gtree.at(top).evo_branch_length(evo_branch_one);
       gtree.at(middle).evo_branch_length(evo_branch_two);
@@ -509,7 +525,8 @@ public:
     OUTPUT: Returns the log of the average likelihood of the genetic trees held
             in gtrees.
   */
-  double sample_gtree(const vector< vector<gnode> > & gtrees, 
+  double sample_gtree(gsl_rng * rngptr, 
+		      const vector< vector<gnode> > & gtrees, 
 		      double * logliks,
 		      const int & num_samples)
   {
@@ -524,7 +541,7 @@ public:
     for (int i = 1; i < num_samples; i++)
       logliks[i] += logliks[i-1];
     double du = logliks[num_samples - 1] / double(num_samples);
-    double u = runif(0, logliks[num_samples - 1]);
+    double u = gsl_runif(rngptr, 0, logliks[num_samples - 1]);
     int sampled = 0;
     while (u > logliks[sampled]) sampled++;
     
@@ -552,7 +569,8 @@ public:
 	      to write over _gtree (in the case of relax_branch > 0).
     OUTPUT: Returns the conditional log likelihood of the particle
   */
-  double relax_branch_lengths(map<string, double> & params,
+  double relax_branch_lengths(gsl_rng * rngptr,
+			      map<string, double> & params,
 			      const vector<string> & sequences, 
 			      int seq_index,
 			      gnode_index new_leaf,
@@ -574,12 +592,14 @@ public:
     for(int i = 0; i < num_samples; i++) {
       // CASE 1
       if(split_branch_top != -1) {
-	beta_bridge(gtrees.at(i), params, split_branch_top); 
+	beta_bridge(rngptr, gtrees.at(i), params, split_branch_top); 
 	// Update the lmatrix at the top node of the split edge
 	recompute_lmatrix(gtrees.at(i), sequences, split_branch_top);
       }
+
       // CASES 1 & 2
-      evo_branch = gamma_branch(gtrees.at(i), params, new_leaf); 
+      evo_branch = gamma_branch(rngptr, gtrees.at(i), params, new_leaf); 
+
       // Attach the sequence at the new leaf
       ell = _model.sequence(sequences.at(seq_index));
       _model.backward_action(ell, evo_branch);
@@ -587,14 +607,14 @@ public:
       // Peel and store the likelihood
       logliks[i] = peel(gtrees.at(i), new_leaf);
     }
-    
+      
     // Sample a gene tree weighted by the likelihood
     if(num_samples == 1) {
       _gtree = gtrees.at(0);
       _loglik += logliks[0];
       return logliks[0];
     } else {
-      return sample_gtree(gtrees, logliks, num_samples);
+      return sample_gtree(rngptr, gtrees, logliks, num_samples);
     }
   }
 
@@ -658,7 +678,8 @@ public:
 	      structure. 
     OUTPUT: The conditional log likelihood of the attached sequence
   */
-  double attach_sequence(const meristem_index & sequenced_index, 
+  double attach_sequence(gsl_rng * rngptr,
+			 const meristem_index & sequenced_index, 
 			 const vector<string> & sequences, 
 			 const double seq_time, 
 			 const int seq_index, 
@@ -678,7 +699,7 @@ public:
 
     // Try a number of branch lengths, sample a tree and return the log of the
     // average conditional likelihood
-    return relax_branch_lengths(params, sequences, seq_index, 
+    return relax_branch_lengths(rngptr, params, sequences, seq_index, 
 				new_leaf, split_branch_top);
   }
 
@@ -692,7 +713,7 @@ public:
 	      path to the root have been properly updated.
     OUTPUT: The conditional log likelihood of the newly attached sequence
   */
-  double peel (vector<gnode> & gtree, node_index me) 
+  double peel (vector<gnode> & gtree, node_index me)
   {
     node_index mom = gtree.at(me).mother();
     node_index sis;
@@ -733,7 +754,8 @@ public:
 	    Updates the transmission and genetic trees accordingly.
   OUTPUT: The simulated sequence
   */
-  string simulate_sequence(meristem_index sequenced_index, 
+  string simulate_sequence(gsl_rng * rngptr, 
+			   meristem_index sequenced_index, 
 			   int nlocus, 
 			   double seq_time, 
 			   map<string,double> & params) 
@@ -752,13 +774,13 @@ public:
     // As in peeling, there are two cases:
     // CASE 1 (we have split a branch)
     if(split_branch_top != -1) {
-      beta_bridge(_gtree, params, split_branch_top); 
-      bridge_lineages(split_branch_top);
+      beta_bridge(rngptr, _gtree, params, split_branch_top); 
+      bridge_lineages(rngptr, split_branch_top);
     }
     // CASES 1 & 2 (split branch or no split branch)
-    double not_used = gamma_branch(_gtree, params, new_leaf); 
+    double not_used = gamma_branch(rngptr, _gtree, params, new_leaf); 
     // Simulate the sequence at the new leaf  
-    return _model.sequence(dress(new_leaf, nlocus));
+    return _model.sequence(dress(rngptr, new_leaf, nlocus));
   }
 
 //80////////////////////////////////////////////////////////////////////////////
@@ -768,7 +790,7 @@ public:
   MODIFIES: Simulates a sequence and adds it to the new internal node
   OUTPUT: none
  */
-void bridge_lineages (gnode_index leaf) {
+  void bridge_lineages (gsl_rng * rngptr, gnode_index leaf) {
   
   // Extract indices of new internal node and its mother
   gnode_index internal = _gtree.at(leaf).mother();
@@ -816,7 +838,7 @@ void bridge_lineages (gnode_index leaf) {
   delete[] sum_array;
   
   // Simulate and place sequence
-  _model.sim(past);
+  _model.sim(rngptr, past);
   _gtree.at(internal).ellmatrix(*past);
 }
 
@@ -828,20 +850,20 @@ void bridge_lineages (gnode_index leaf) {
 	    and places it at the genetic node.
   OUTPUT: The simulated lmatrix
  */
-  Lmatrix * dress(gnode_index me, int nlocus) {
+  Lmatrix * dress(gsl_rng * rngptr, gnode_index me, int nlocus) {
     if (_gtree.at(me).has_data()) {
       return _gtree.at(me).ellmatrix();
     } else if (is_groot(me)) {
       Lmatrix *ell = _model.stat_ellmatrix(nlocus);
-      _model.sim(ell);
+      _model.sim(rngptr, ell);
       _gtree.at(me).ellmatrix(*ell);
       return ell;
     } else {
       node_index mom = _gtree.at(me).mother();
-      Lmatrix *ell = new Lmatrix(*(dress(mom, nlocus)));
+      Lmatrix *ell = new Lmatrix(*(dress(rngptr, mom, nlocus)));
       double evo_branch = _gtree.at(me).evo_branch_length();
       _model.forward_action(ell, evo_branch);
-      _model.sim(ell);
+      _model.sim(rngptr, ell);
       _gtree.at(me).ellmatrix(*ell);
       return ell;
     }

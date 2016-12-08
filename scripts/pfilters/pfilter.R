@@ -7,7 +7,7 @@
 require(digest)
 
 "This script runs iterated filtering
-Usage: pfilter.R --data_file=<dat> --usermodel_dir=<usermodeldir> --params_file=<par> --result_dir=<dest> --n_reps=<nreps> --n_threads=<nthreads> --n_nested=<nnested> --n_branch_samples=<nbranchsamples> --n_particles=<nparticles> --environment=<environment> [--remove_invariant_sites --save_internals --reproducible] [PARAMS]...
+Usage: pfilter2.R --data_file=<dat> --usermodel_dir=<usermodeldir> --params_file=<par> --result_dir=<dest> --n_reps=<nreps> --n_threads=<nthreads> --n_nested=<nnested> --n_branch_samples=<nbranchsamples> --n_particles=<nparticles> --environment=<environment> [--remove_invariant_sites --save_internals --reproducible] [PARAMS]...
 " -> doc
 
 library(docopt)
@@ -20,11 +20,12 @@ params <- params_df$V2
 names(params) <- params_df$V1  
 
 ## Load functions for reproducibility and calculating initial conditions
-source('../Rfunctions/reproducibility_functions.R')
-source('../Rfunctions/text_parse_functions.R')
-source('../Rfunctions/initial_conditions.R')
+source('../Rfunctions/reproducibilityFunctions.R')
+source('../Rfunctions/textParseFunctions.R')
+source('../Rfunctions/initialConditions.R')
 
 ## Build executable
+#tmp_dir <- "debug"
 tmp_dir <- tempdir()
 usermodel_dir <- file.path("../../../src/models", opt$usermodel_dir)
 if(opt$reproducible) {
@@ -32,7 +33,7 @@ if(opt$reproducible) {
 } else {
   Sys.unsetenv('CMD_LINE_FLAGS')  
 }
-makeExecutable('pfilter', mainfiledir = "../../standalone", tmpdir = tmp_dir, srcdir = "../../src",
+makeExecutable('pfilter', mainfiledir = "../../../standalone", tmpdir = tmp_dir, srcdir = "../../../src",
                usermodelDirectory = usermodel_dir)
 
 ## Extract info on last git commit and extract this script to an object
@@ -103,4 +104,11 @@ for(i in 1:opt$n_reps){
   master_filename <- file.path(rep_resdir, "pfilter.Rdata")
   save(list = c('runtime', 'params', 'pf_runscript', 'pf_unique_id',
                 'pf_gitcommit', 'environment', 'condlogliks'), file = master_filename)
+  
+  ## Save file for comparing likelihoods
+  #see_filename <- file.path(rep_resdir, 'see.R')
+  #writeLines(text = 'load(\'pfilter.Rdata\') 
+  #                   \ncondlogliks$sum <- condlogliks$hazard + condlogliks$p_no_diagnosis 
+  #                   \nprint(condlogliks) \n',
+  #           con = see_filename)
 }

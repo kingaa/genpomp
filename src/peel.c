@@ -3,8 +3,8 @@
 #include <string.h>
 #include "type_defs.h"
 
-#include <R_ext/BLAS.h>
-#include <R_ext/Lapack.h>
+//#include <R_ext/BLAS.h>
+//#include <R_ext/Lapack.h>
 
 
 /*
@@ -13,8 +13,8 @@
 
 #ifdef SINGLE
 */
-//#include "mkl_blas.h"
-//#include "mkl_lapack.h"
+#include "mkl_blas.h"
+#include "mkl_lapack.h"
 //#endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -235,4 +235,3 @@ void molmodel_action (int n, int nlocus, double t,
     }
   }
 }
-

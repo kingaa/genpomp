@@ -317,10 +317,10 @@ RngStream RngStream_CreateStream (const char name[])
       g->name = (char *) malloc ((len + 1) * sizeof (char));
       strncpy (g->name, name, len + 1);
    } else
-      g->name = 0;
+     g->name = 0;
    g->Anti = 0;
    g->IncPrec = 0;
-
+   
    for (i = 0; i < 6; ++i) {
       g->Bg[i] = g->Cg[i] = g->Ig[i] = nextSeed[i];
    }
@@ -510,7 +510,7 @@ double RngStream_RandU01 (RngStream g)
 
 /*-------------------------------------------------------------------------*/
 
-int RngStream_RandInt (RngStream g, int i, int j)
+unsigned long int RngStream_RandInt (RngStream g, unsigned long int i, unsigned long int j)
 {
-   return i + (int) ((j - i + 1.0) * RngStream_RandU01 (g));
+   return i + (unsigned long int) ((j - i + 1.0) * RngStream_RandU01 (g));
 }

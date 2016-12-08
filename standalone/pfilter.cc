@@ -86,10 +86,10 @@ int main ( int argc, char *argv[] )
     //create_initial_rng_states(1 + params["np"], params["seed"]);  
 
     //Set up parallel random number generators
-    createStreams(1+ params["np"], params["num_threads"], params["seed"]);  
+    gsl_rng * rngstreams = createStreams(1+ params["np"], params["seed"]);  
 
     //Run the particle filter
-    Particlefilter pf(mod, params, times, seqs, argv[4], save_internals); 
+    Particlefilter pf(rngstreams, mod, params, times, seqs, argv[4], save_internals); 
     
     /*
     ofstream fileStream1;

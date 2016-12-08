@@ -1,20 +1,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <omp.h>
-#include <R_ext/Random.h>
-#include <R.h>
-#include <Rdefines.h>
+#include <math.h>
 #include "RngStream.h"
-#include "padded_map.h"
+#include "gsl_rng.h"
 
-
+/*
+typedef struct paddedRngptr {
+  RngStream rng; // 8 bytes
+  double pad[15]; // 120 bytes 
+} paddedRngptr;  // 128 bytes total = size of two cache lines
 //double *u;        // array to hold one double for each RNG (note: unused in standalone version)
+//paddedRngptr * rngstreams; // pointer to array of padded pointers to eliminate false sharing
+*/
 
 int nStreams = 0;
-RngStream *rngstreams; // independent RNGs
-//int *thread_stream_map = 0; 
-padded_map *thread_stream_map = 0;
-
+gsl_rng *rngstreams; // independent RNGs
 
 void destroyStreams (void) {
   int i;
@@ -22,20 +23,19 @@ void destroyStreams (void) {
     for (i = 0;  i < nStreams;  i++) RngStream_DeleteStream(&rngstreams[i]);    
     free(rngstreams);
   }
-  if (thread_stream_map != 0) free(thread_stream_map);
   nStreams = 0;
 }
 
-void createStreams (int n, int nthreads, Int32 seed_in) {
+gsl_rng * createStreams (int n, int seed_in) {
   int i;
   unsigned long lecseed[6];
   destroyStreams();
   if (n > 0) {
     nStreams = n;
-    printf("Using %d RNG streams\n", n);
+    printf("Using %d random number streams\n", n);
   } else if (nStreams == 0) {
     nStreams = 1;
-    printf("Warning: using only one RNG\n");
+    printf("Warning: using only one random number stream\n");
   }
 
   for (i = 0; i < 6; i++) {
@@ -43,19 +43,40 @@ void createStreams (int n, int nthreads, Int32 seed_in) {
   }
 
   rngstreams = (RngStream *) malloc(nStreams*sizeof(RngStream *));
-  //thread_stream_map = (int *) malloc(nthreads*sizeof(int));
-  //for (i = 0; i < nthreads; i++) thread_stream_map[i] = 0;
-  thread_stream_map = (padded_map *) malloc(nthreads*sizeof(padded_map));
-  for (i = 0; i < nthreads; i++) thread_stream_map[i].stream_index = 0;
 
   int fail = RngStream_SetPackageSeed(lecseed);
   if (fail) printf("Warning: failure in RngStream_SetPackageSeed\n");
   for (i = 0;  i < nStreams;  i++) 
     rngstreams[i] = RngStream_CreateStream("");  
+  return rngstreams;
 }
 
-double unif_rand() 
-{ 
-  //return RngStream_RandU01(rngstreams[thread_stream_map[omp_get_thread_num()]]);
-  return RngStream_RandU01(rngstreams[thread_stream_map[omp_get_thread_num()].stream_index]);
-} 
+double gsl_runif(gsl_rng *stream, double a, double b)
+{
+  if (!isfinite(a) || !isfinite(b) || b < a)  NAN;
+
+  if (a == b)
+    return a;
+  else {
+    double u;
+    do {u = RngStream_RandU01(*stream);} while (u <= 0 || u >= 1);
+    return a + (b - a) * u;
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

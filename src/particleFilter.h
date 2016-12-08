@@ -15,12 +15,10 @@
 #include <fstream>
 #include <iostream>
 #include "type_defs.h"
-#include "padded_map.h"
+#include "gsl_rng.h"
+#include "gsl_randist.h"
 
 //#include "mkl.h"
-
-//extern int *thread_stream_map;
-extern padded_map *thread_stream_map;
 
 using namespace std;
 
@@ -44,7 +42,8 @@ private:
     vector<int> tab;
 
   public:
-    resampler (int np, double *w) : 
+
+    resampler (gsl_rng * rngptr, int np, double *w) : 
       n(np), tab(np) {
       
       // Copy the weights so they are not modified
@@ -70,7 +69,7 @@ private:
       for (int j = 1; j < n; j++) 
         w[j] += w[j-1];
       du = w[n-1] / double(n);
-      double u = runif(-du,0);
+      double u = gsl_runif(rngptr, -du, 0);
     
       for (int i = 0, j = 0; i < n; i++) {
         u += du;
@@ -116,11 +115,12 @@ private:
 public:
 	
   // Constructor
-  Particlefilter(substModel model, map<string,double> & params, 
-		 vector<double> & times, vector<string> & seqs, string resdir, bool save_internals) {
+  Particlefilter(gsl_rng * rngptr, 
+		 substModel model, map<string,double> & params, 
+		 vector<double> & times, vector<string> & seqs, 
+		 string resdir, bool save_internals) {
 
     //mkl_disable_fast_mm();
-
 
     // Extract filtering parameters
     int np = params["np"];
@@ -139,7 +139,7 @@ public:
     
     // Counter of number of filtering failures
     nfail = 0;
-    
+
     /*
     //Reserve space for effective sample size and ancestor indices
     ess.reserve(nt);
@@ -162,6 +162,7 @@ public:
     cout << "Filtering with " << np << " particles over " << nt << " data points" << endl;    
     for (int i = 0; i < nt; i++) { 
 
+
       // If requested, write states to file
       if(save_internals){
 	for(int k = 0; k < np; k++) particles.at(k).write_states(i, k, states_file);
@@ -174,52 +175,34 @@ public:
       // BEGIN PARALLEL LOOP
 #pragma omp parallel for num_threads(num_threads) schedule(static) private(weights_vec)
       for(int j = 0; j < np; j++) {
-	
-	// Tie the random number stream to the loop index
-	thread_stream_map[omp_get_thread_num()].stream_index = j + 1;
 
-	// std::vector<double> dummy;
-	// dummy.push_back(runif(0,1));
-	// dummy.push_back(runif(0,1));
-	
-	// if(runif(0,1) < 0.5){
-	//   dummy.push_back(-1.0 /0.0);
-	// } else {
-	//   dummy.push_back(runif(0,1));
-	// }
-	// weights_vec = dummy;
 	if (i == 0) { 
-	  weights_vec = nested_resample(particles.at(j), num_nested, params, i, params["start_time"], times[i], seqs, model);	
+	  weights_vec = nested_resample(&rngptr[j+1], particles.at(j), num_nested, params, i, params["start_time"], times[i], seqs, model);	
 	} else {
-	  weights_vec = nested_resample(particles.at(j), num_nested, params, i, times[i-1], times[i], seqs, model);
+	  weights_vec = nested_resample(&rngptr[j+1], particles.at(j), num_nested, params, i, times[i-1], times[i], seqs, model);
 	}
 	hazards[j] = weights_vec.at(0); // these are on the log scale
 	diagnosis_probs[j] = weights_vec.at(1); // these are on the log scale
 	weights[j] = weights_vec.at(2); // cll
 	// Ensure no memory leaks from mkl
 	//mkl_free_buffers();
-	
-	// Reset rng stream to zeroth stream
-	//thread_stream_map[omp_get_thread_num()] = 0;
       }           
       // END PARALLEL LOOP      
-
-      for(int q = 0; q < num_threads; q++) thread_stream_map[q].stream_index = 0;
 
       // Count failures
       for(int q = 0; q < np; q++){
 	if(!R_FINITE(weights[q])) nfail += 1;
       }
       
-      // if(i == 6){
-      // 	for(int q = 0; q < np; q++) cout << "weight " << q << " " <<  weights[q] << endl;
-      // 	string tree_file_name = resdir + "trees.txt";
-      // 	const char * tree_file = tree_file_name.c_str();
-      // 	for(int q = 0; q < np; q++) particles.at(q).save_transmission_tree(tree_file);
-      // 	string gtree_file_name = resdir + "gtrees.txt";
-      // 	const char * gtree_file = gtree_file_name.c_str();
-      // 	for(int q = 0; q < np; q++) particles.at(q).save_gtree(gtree_file);
-      // }
+        // if(i == 16){
+      	// for(int q = 0; q < np; q++) cout << "weight " << q << " " <<  weights[q] << endl;
+      	// string tree_file_name = resdir + "trees.txt";
+      	// const char * tree_file = tree_file_name.c_str();
+      	// for(int q = 0; q < np; q++) particles.at(q).save_transmission_tree(tree_file);
+      	// string gtree_file_name = resdir + "gtrees.txt";
+      	// const char * gtree_file = gtree_file_name.c_str();
+      	// for(int q = 0; q < np; q++) particles.at(q).save_gtree(gtree_file);
+	// }
 
       /*
       //Store the weights
@@ -241,7 +224,7 @@ public:
       */
 
       //Systematic resampling
-      resampler R(np, weights);
+      resampler R(&rngptr[0], np, weights);
       R.resample(particles);
       condloglik[i] = R.loglik();
 
@@ -293,13 +276,13 @@ public:
   } 
 
   // Nested proposal and resample function
-  std::vector<double> nested_resample(Usermodel & particle, const int & nExpand,
-			map<string,double> & params, const int & sampleNum, 
-			const double & timeStart, const double & timeEnd, vector<string> & seqs,
-			substModel model) {
+  std::vector<double> nested_resample(gsl_rng * rngptr, Usermodel & particle, const int & nExpand,
+				      map<string,double> & params, const int & sampleNum, 
+				      const double & timeStart, const double & timeEnd, vector<string> & seqs,
+				      substModel model) {
 
     // Simulate to next sample
-    particle.rprocess(params,timeStart,timeEnd);
+    particle.rprocess(rngptr, params, timeStart, timeEnd);
     
     // Extract diagnosis hazard and probability of no diagnosis 
       // (these will be the same for all nested particles)
@@ -327,7 +310,7 @@ public:
 	// Copy particle into buffer
 	nestedParticles.at(i) = particle;
 	// Compute conditional log likelihood
-	nWeights[i] = nestedParticles.at(i).dmeasure(params,seqs,sampleNum,timeEnd);
+	nWeights[i] = nestedParticles.at(i).dmeasure(rngptr, params, seqs, sampleNum, timeEnd);
       }
       
       // Find maximum of nested likelihoods
@@ -351,7 +334,7 @@ public:
       //Weighted sample of one particle; below selects the index of the sampled particle
       for (int j = 1; j < nExpand; j++) 
 	nWeights[j] += nWeights[j-1];  //running sum
-      double u = runif(0,nWeights[nExpand-1]);
+      double u = gsl_runif(rngptr, 0, nWeights[nExpand-1]);
       int sampledIndex = 0;
       while(u > nWeights[sampledIndex]) sampledIndex++;
       
@@ -371,10 +354,10 @@ public:
       
     } else {
 
-      double weight = particle.dmeasure(params,seqs,sampleNum,timeEnd);
+      double weight = particle.dmeasure(rngptr, params, seqs, sampleNum, timeEnd);
       results.push_back(weight); 
       return results;
-      
+
     }
   }
 
@@ -441,7 +424,7 @@ public:
     //RNGScope scope;
     for (int j = 1; j < nExpand; j++) 
       nestedWeights[j] += nestedWeights[j-1];  //running sum
-    double u = runif(0,nestedWeights[nExpand-1]);
+    double u = gsl_runif(0,nestedWeights[nExpand-1]);
     int sampledIndex = 0;
     while(u > nestedWeights[sampledIndex]) sampledIndex++;
     

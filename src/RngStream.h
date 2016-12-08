@@ -25,7 +25,7 @@ void RngStream_GetState (RngStream g, unsigned long seed[6]);
 void RngStream_WriteState (RngStream g);
 void RngStream_WriteStateFull (RngStream g);
 double RngStream_RandU01 (RngStream g);
-int RngStream_RandInt (RngStream g, int i, int j);
+unsigned long int RngStream_RandInt (RngStream g, unsigned long int i, unsigned long int j);
 
 #endif
  

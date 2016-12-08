@@ -14,6 +14,9 @@
 #include <map>
 #include "lmatrix.h"
 #include "type_defs.h"
+#include "gsl_rng.h"
+#include "gsl_randist.h"
+#include "userUnif.h"
 
 typedef std::map<char,int> allele_map;
 
@@ -271,14 +274,14 @@ public:
 /// Was this correctly converted to cpp? //////
 ///////////////////////////////////////////////
 
-  void sim (Lmatrix *ell) {
+  void sim (gsl_rng * rngptr, Lmatrix *ell) {
     int n = ell->nallele;
     int nlocus = ell->nlocus;
     storage_type c, *ellp = ell->data;
     double u;
     int i, j, k;
     for (j = 0; j < nlocus; j++) {
-      u = runif(0,1);
+      u = gsl_runif(rngptr, 0, 1);
       c = ellp[0]; k = 0;
       while (c < u) c += ellp[++k];
       for (i = 0; i < n; i++)

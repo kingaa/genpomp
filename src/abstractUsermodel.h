@@ -5,6 +5,7 @@
 #define _ABSTRACT_USERMODEL_H_
 
 #include "type_defs.h"
+#include "gsl_rng.h"
 
 using namespace std;
 
@@ -28,13 +29,15 @@ public:
 			  int nlocus) = 0;
 	
   //dMeasure
-  virtual double dmeasure(map<string,double> & params, 
+  virtual double dmeasure(gsl_rng * rngptr,
+			  map<string,double> & params, 
 			  const vector<string> & seqs,
 			  int seq_index, 
 			  double sample_time) = 0;
 		
   //rProcess
-  virtual void rprocess(map<string,double> & params, 
+  virtual void rprocess(gsl_rng * rngptr,
+			map<string,double> & params, 
 			double start_time, 
 			double end_time) = 0;
 };

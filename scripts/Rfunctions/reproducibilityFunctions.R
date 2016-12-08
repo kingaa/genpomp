@@ -44,7 +44,9 @@ makeExecutable <- function(mainfileStem, mainfiledir, srcdir, tmpdir, usermodelD
     "io.h",
     "reduceSeqs.h",
     "type_defs.h",
-    "padded_map.h",
+    "gsl_randist.h",
+    "gsl_rng.h",
+    "constants.h",
     "tmpdirMakefile"
   )
 
@@ -52,14 +54,18 @@ makeExecutable <- function(mainfileStem, mainfiledir, srcdir, tmpdir, usermodelD
     "basenode.cc",
     "gnode.cc",
     "node.cc",
-    #"tree.cc",
     "substmodel.cc",
     "io.cc",
     "reduceSeqs.cc",
-    "inter.c",
     "userUnif.c",
     "RngStream.c",
-    "peel.c"
+    "peel.c",
+    "constants.c",
+    "beta.c",
+    "exponential.c",
+    "gamma.c",
+    "gausszig.c",
+    "gsl_unif.c"
   )
 
   for (file in c(includefiles, cfiles))

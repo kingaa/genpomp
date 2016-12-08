@@ -19,6 +19,8 @@
 #include <list>
 #include <stdexcept>
 #include "type_defs.h"
+#include "gsl_rng.h"
+#include "gsl_randist.h"
 
 using namespace std;
  
@@ -112,7 +114,8 @@ public:
   }
 	
   //dMeasure
-  double dmeasure(map<string,double> & params, 
+  double dmeasure(gsl_rng * rngptr,
+		  map<string,double> & params, 
 		  const vector<string> & seqs,
 		  int seq_index, 
 		  double sample_time) 
@@ -137,36 +140,42 @@ public:
     wI1 =  numI1 * params["diagI1"];
     wI2 =  numI2 * params["diagI2"]; 
     total = wI0 + wI1 + wI2;
-    u = runif(0,total);
+    u = gsl_runif(rngptr, 0,total);
     int who;
 
+
+
+
     if(u < wI0) {
-      who = (int) floor(runif(0, numI0));
+      who = (int) floor(gsl_runif(rngptr, 0, numI0));
       _diagnosed0.push_back(_undiagnosed0[who]);
       remove_meristem(_undiagnosed0, who);
-      if(seqs[seq_index] != "NA") seq_cll = attach_sequence(_diagnosed0.back(),
-							   seqs,
-							   sample_time,
-							   seq_index,
-							   params);      
+      if(seqs[seq_index] != "NA") seq_cll = attach_sequence(rngptr,
+							    _diagnosed0.back(),
+							    seqs,
+							    sample_time,
+							    seq_index,
+							    params);      
     } else if (u < wI0 + wI1) {
-      who = (int) floor(runif(0, numI1));
+      who = (int) floor(gsl_runif(rngptr, 0, numI1));
       _diagnosed1.push_back(_undiagnosed1[who]);
       remove_meristem(_undiagnosed1, who);
-      if(seqs[seq_index] != "NA") seq_cll = attach_sequence(_diagnosed1.back(),
-							   seqs,
-							   sample_time,
-							   seq_index,
-							   params);      
+      if(seqs[seq_index] != "NA") seq_cll = attach_sequence(rngptr,
+							    _diagnosed1.back(),
+							    seqs,
+							    sample_time,
+							    seq_index,
+							    params);      
     } else {
-      who = (int) floor(runif(0, numI2));
+      who = (int) floor(gsl_runif(rngptr, 0, numI2));
       _diagnosed2.push_back(_undiagnosed2[who]);
       remove_meristem(_undiagnosed2, who);
-      if(seqs[seq_index] != "NA") seq_cll = attach_sequence(_diagnosed2.back(),
-							   seqs,
-							   sample_time,
-							   seq_index,
-							   params);      
+      if(seqs[seq_index] != "NA") seq_cll = attach_sequence(rngptr,
+							    _diagnosed2.back(),
+							    seqs,
+							    sample_time,
+							    seq_index,
+							    params);      
     }	
     
     // Compute the likelihood of observing the sample
@@ -174,57 +183,20 @@ public:
 		   params["diagI1"] * _I1_pop_integral + 
 		   params["diagI2"] * _I2_pop_integral) + log(total);
 
-    // if(sample_cll > 1000){
-      
-    //   cout << "large diagnosis likelihood" << endl;
-    //   cout << "diagnosis rate I0: " << params["diagI0"] <<  endl;
-    //   cout << "diagnosis rate I1: " << params["diagI1"] <<  endl;
-    //   cout << "diagnosis rate I2: " << params["diagI2"] <<  endl;
-    //   cout << "I0 pop integral: " << _I0_pop_integral <<  endl;      
-    //   cout << "I1 pop integral: " << _I1_pop_integral <<  endl;      
-    //   cout << "I2 pop integral: " << _I2_pop_integral <<  endl;      
-    //   cout << "total: " << total << endl;
-    //   cout << "number of I0: " << numI0 << endl;
-    //   cout << "number of I1: " << numI1 << endl;
-    //   cout << "number of I2: " << numI2 << endl;
-    // }
-    
-    // if(seq_cll > 0){
-    //   cout << "large seq probability" << endl;
-    //   cout << seq_cll << endl;
-    // }
-
     // Reset the popIntegrals
     _I0_pop_integral = 0;
     _I1_pop_integral = 0;
     _I2_pop_integral = 0;
 
     //Return the conditional log likelihood
+// #pragma omp critical
+//   {
+//     if(seq_index == 53) cout << "sample cll: " <<  sample_cll << endl;
+//     if(seq_index == 53) cout << "seq cll: " << seq_cll << endl;
+//     if(seq_index == 53) cout << seqs[seq_index] << endl;
+//   }      
     return sample_cll + seq_cll;
   }
-
-
-  // Print quantities in the diagnosis likelihood to file
-  // void print_particle(const char * particle_file, map<string,double> & params){
-  //   // Extract counts of undiagnosed individuals in each stage
-  //   double numI0 = (double) _undiagnosed0.size();
-  //   double numI1 = (double) _undiagnosed1.size();
-  //   double numI2 = (double) _undiagnosed2.size();
-    
-  //   ofstream filestream;
-  //   filestream.open(particle_file);
-  //   filestream << "diagnosis rate I0: " << params["diagI0"] <<  endl;
-  //   filestream << "diagnosis rate I1: " << params["diagI1"] <<  endl;
-  //   filestream << "diagnosis rate I2: " << params["diagI2"] <<  endl;
-  //   filestream << "I0 pop integral: " << _I0_pop_integral <<  endl;      
-  //   filestream << "I1 pop integral: " << _I1_pop_integral <<  endl;      
-  //   filestream << "I2 pop integral: " << _I2_pop_integral <<  endl;      
-  //   filestream << "number of I0: " << numI0 << endl;
-  //   filestream << "number of I1: " << numI1 << endl;
-  //   filestream << "number of I2: " << numI2 << endl;
-  //   filestream.close();
-  // }
-
 
   // Function to compute the log of the hazard of a diagnosis
   // NOTE: to be accurate, this function must be called before dmeasure, which 
@@ -253,7 +225,7 @@ public:
   }
 
   //rProcess
-  void rprocess(map<string,double> & params, double start_time, double end_time)
+  void rprocess(gsl_rng * rngptr, map<string,double> & params, double start_time, double end_time)
     
   {
     double t = start_time;
@@ -296,8 +268,7 @@ public:
 	rates[16] = params["gammaJ1J2"] * numJ1;
 	// Convert to cumulative rates
 	for(int i = 1; i < nrates; i++) rates[i] += rates[i-1]; 
-	dt = rexp(1/rates[nrates-1]);
-	// dt = -log(runif())/rates[nrates-1]; // AAK- CHECK TO SEE IF REXP IS WHAT YOU THINK IT IS.
+	dt = gsl_ran_exponential(rngptr, 1/rates[nrates-1]);
 
 	// Check the time, leave loop if time has exceeded end_time
 	if(t + dt > end_time || !isfinite(dt)) {
@@ -317,7 +288,7 @@ public:
 	_I2_pop_integral += numI2 * dt;
 
 	// Determine the type of the event 
-	u = runif(0,rates[nrates-1]);
+	u = gsl_runif(rngptr, 0, rates[nrates-1]);
 	int eventType = 0;
 	while(u > rates[eventType]) eventType++;
 
@@ -329,7 +300,7 @@ public:
 	  case 0:  // Infection event by I0
 	    
 	    {
-	      who = (int) floor(runif(0, _undiagnosed0.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _undiagnosed0.size())); 
 	      _undiagnosed0.push_back(add_meristem(_undiagnosed0[who], t));
 	      break;
 	    }
@@ -337,7 +308,7 @@ public:
 	  case 1:  // Infection event by I1
 	    
 	    {
-	      who = (int) floor(runif(0, _undiagnosed1.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _undiagnosed1.size())); 
 	      _undiagnosed0.push_back(add_meristem(_undiagnosed1[who], t));
 	      break;
 	    }
@@ -345,7 +316,7 @@ public:
 	  case 2:  // Infection by individual of class I2
 
 	    {
-	      who = (int) floor(runif(0, _undiagnosed2.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _undiagnosed2.size())); 
 	      _undiagnosed0.push_back(add_meristem(_undiagnosed2[who], t));
 	      break;
 	    }	      
@@ -353,7 +324,7 @@ public:
 	  case 3:  // Infection by individual of class J0
 	    
 	    {
-	      who = (int) floor(runif(0, _diagnosed0.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _diagnosed0.size())); 
 	      _undiagnosed0.push_back(add_meristem(_diagnosed0[who], t));
 	      break;
 	    }
@@ -361,7 +332,7 @@ public:
 	  case 4:  // Infection by individual of class J1
 	    
 	    {
-	      who = (int) floor(runif(0, _diagnosed1.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _diagnosed1.size())); 
 	      _undiagnosed0.push_back(add_meristem(_diagnosed1[who], t));
 	      break;
 	    }
@@ -369,7 +340,7 @@ public:
 	  case 5:  // Infection by individual of class J2
 	    
 	    {
-	      who = (int) floor(runif(0, _diagnosed2.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _diagnosed2.size())); 
 	      _undiagnosed0.push_back(add_meristem(_diagnosed2[who], t));
 	      break;
 	    }
@@ -387,7 +358,7 @@ public:
 
 	    {	    
 	      // Randomly choose an I0 victim
-	      who = (int) floor(runif(0, _undiagnosed0.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _undiagnosed0.size())); 
 	      terminate_meristem(_undiagnosed0[who], t);						
 	      remove_meristem(_undiagnosed0, who);
 	      break;
@@ -397,7 +368,7 @@ public:
 	    
 	    {
 	      // Randomly choose an I1 victim
-	      who = (int) floor(runif(0, _undiagnosed1.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _undiagnosed1.size())); 
 	      terminate_meristem(_undiagnosed1[who], t);						
 	      remove_meristem(_undiagnosed1, who);
 	      break;
@@ -407,7 +378,7 @@ public:
 	    
 	    {
 	      // Randomly choose an I1 victim
-	      who = (int) floor(runif(0, _undiagnosed2.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _undiagnosed2.size())); 
 	      terminate_meristem(_undiagnosed2[who], t);						
 	      remove_meristem(_undiagnosed2, who);
 	      break;
@@ -417,7 +388,7 @@ public:
 	    
 	    {
 	      // Randomly choose a J0 victim
-	      who = (int) floor(runif(0,_diagnosed0.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0,_diagnosed0.size())); 
 	      terminate_meristem(_diagnosed0[who],t);						
 	      remove_meristem(_diagnosed0,who);
 	      break;
@@ -427,7 +398,7 @@ public:
 	    
 	    {
 	      // Randomly choose a J1 victim
-	      who = (int) floor(runif(0, _diagnosed1.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _diagnosed1.size())); 
 	      terminate_meristem(_diagnosed1[who], t);						
 	      remove_meristem(_diagnosed1, who);
 	      break;
@@ -437,7 +408,7 @@ public:
 	    
 	    {
 	      // Randomly choose a J2 victim
-	      who = (int) floor(runif(0, _diagnosed2.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _diagnosed2.size())); 
 	      terminate_meristem(_diagnosed2[who], t);						
 	      remove_meristem(_diagnosed2, who);
 	      break;
@@ -447,7 +418,7 @@ public:
 	    
 	    {
 	      // Randomly choose an I0 to transition
-	      who = (int) floor(runif(0, _undiagnosed0.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _undiagnosed0.size())); 
 	      // Update meristem lists
 	      _undiagnosed1.push_back(_undiagnosed0[who]);
 	      remove_meristem(_undiagnosed0, who);						
@@ -458,7 +429,7 @@ public:
 	    
 	    {
 	      // Randomly choose an I1 to transition
-	      who = (int) floor(runif(0, _undiagnosed1.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _undiagnosed1.size())); 
 	      // Update meristem lists
 	      _undiagnosed2.push_back(_undiagnosed1[who]);
 	      remove_meristem(_undiagnosed1, who);						
@@ -469,7 +440,7 @@ public:
 	    
 	    {
 	      // Randomly choose a J0 to transition
-	      who = (int) floor(runif(0, _diagnosed0.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _diagnosed0.size())); 
 	      // Update meristem lists
 	      _diagnosed1.push_back(_diagnosed0[who]);
 	      remove_meristem(_diagnosed0,who);			
@@ -480,7 +451,7 @@ public:
 
 	    {
 	      // Randomly choose a J1 to transition
-	      who = (int) floor(runif(0, _diagnosed1.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _diagnosed1.size())); 
 	      // Update meristem lists
 	      _diagnosed2.push_back(_diagnosed1[who]);
 	      remove_meristem(_diagnosed1, who);			
@@ -498,7 +469,8 @@ public:
   }
    		
   //simulate
-  void simulate(map<string,double> & params, double start_time, double end_time, string root_sequence)
+  void simulate(gsl_rng * rngptr, map<string,double> & params, 
+		double start_time, double end_time, string root_sequence)
   {
     
     double t = start_time;
@@ -548,7 +520,7 @@ public:
 	rates[19] = params["diagI2"] * numI2;
 	// Convert to cumulative rates
 	for(int i = 1; i < nrates; i++) rates[i] += rates[i-1]; 
-	dt = rexp(1/rates[nrates-1]);
+	dt = gsl_ran_exponential(rngptr, 1/rates[nrates-1]);
 	
 	// Update time
 	t += dt;
@@ -585,7 +557,7 @@ public:
 	}
 	
 	// Determine the type of the event 
-	u = runif(0,rates[nrates-1]);
+	u = gsl_runif(rngptr, 0, rates[nrates-1]);
 	int event_type = 0;
 	while(u > rates[event_type]) event_type++;
 	
@@ -599,7 +571,7 @@ public:
 	    
 	    {
 	      // Choose random individual as infector and modify tree
-	      who = (int) floor(runif(0, _undiagnosed0.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _undiagnosed0.size())); 
 	      _undiagnosed0.push_back(add_meristem(_undiagnosed0[who], t));
 	      _states.push_back("I0");
 	      // Update counts of individuals
@@ -611,7 +583,7 @@ public:
 	    
 	    {
 	      // Choose random individual as infector and modify tree
-	      who = (int) floor(runif(0, _undiagnosed1.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _undiagnosed1.size())); 
 	      _undiagnosed0.push_back(add_meristem(_undiagnosed1[who], t));
 	      _states.push_back("I1");
 	      // Update counts of individuals
@@ -623,7 +595,7 @@ public:
 	    
 	    {
 	      // Choose random individual as infector and modify tree
-	      who = (int) floor(runif(0,_undiagnosed2.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0,_undiagnosed2.size())); 
 	      _undiagnosed0.push_back(add_meristem(_undiagnosed2[who], t));
 	      _states.push_back("I2");
 	      // Update counts of individuals
@@ -635,7 +607,7 @@ public:
 	    
 	    {
 	      // Choose random individual as infector and modify tree
-	      who = (int) floor(runif(0,_diagnosed0.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0,_diagnosed0.size())); 
 	      _undiagnosed0.push_back(add_meristem(_diagnosed0[who], t));
 	      _states.push_back("J0");
 	      // Update counts of individuals
@@ -647,7 +619,7 @@ public:
 	    
 	    {
 	      // Choose random individual as infector and modify tree
-	      who = (int) floor(runif(0,_diagnosed1.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0,_diagnosed1.size())); 
 	      _undiagnosed0.push_back(add_meristem(_diagnosed1[who], t));
 	      _states.push_back("J1");
 	      // Update counts of individuals
@@ -659,7 +631,7 @@ public:
 	    
 	    {
 	      // Choose random individual as infector and modify tree
-	      who = (int) floor(runif(0,_diagnosed2.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0,_diagnosed2.size())); 
 	      _undiagnosed0.push_back(add_meristem(_diagnosed2[who], t));
 	      _states.push_back("J2");
 	      // Update counts of individuals
@@ -683,7 +655,7 @@ public:
 	    
 	    {	    
 	      // Randomly choose an I0 victim
-	      who = (int) floor(runif(0, _undiagnosed0.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _undiagnosed0.size())); 
 	      terminate_meristem(_undiagnosed0[who], t);						
 	      remove_meristem(_undiagnosed0, who);
 	      _states.push_back("I0");	     
@@ -696,7 +668,7 @@ public:
 	    
 	    {
 	      // Randomly choose an I1 victim
-	      who = (int) floor(runif(0, _undiagnosed1.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _undiagnosed1.size())); 
 	      terminate_meristem(_undiagnosed1[who], t);						
 	      remove_meristem(_undiagnosed1, who);
 	      _states.push_back("I1");	     
@@ -709,7 +681,7 @@ public:
 	    
 	    {
 	      // Randomly choose an I1 victim
-	      who = (int) floor(runif(0, _undiagnosed2.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _undiagnosed2.size())); 
 	      terminate_meristem(_undiagnosed2[who], t);						
 	      remove_meristem(_undiagnosed2, who);
 	      _states.push_back("I2");	     
@@ -722,7 +694,7 @@ public:
 	    
 	    {
 	      // Randomly choose a J0 victim
-	      who = (int) floor(runif(0, _diagnosed0.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _diagnosed0.size())); 
 	      terminate_meristem(_diagnosed0[who], t);						
 	      remove_meristem(_diagnosed0, who);
 	      _states.push_back("J0");	     
@@ -735,7 +707,7 @@ public:
 	    
 	    {
 	      // Randomly choose a J1 victim
-	      who = (int) floor(runif(0, _diagnosed1.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _diagnosed1.size())); 
 	      terminate_meristem(_diagnosed1[who], t);						
 	      remove_meristem(_diagnosed1, who);
 	      _states.push_back("J1");	     
@@ -748,7 +720,7 @@ public:
 	    
 	    {
 	      // Randomly choose a J1 victim
-	      who = (int) floor(runif(0, _diagnosed2.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _diagnosed2.size())); 
 	      terminate_meristem(_diagnosed2[who], t);						
 	      remove_meristem(_diagnosed2, who);
 	      _states.push_back("J2");	     
@@ -761,7 +733,7 @@ public:
 	    
 	    {
 	      // Randomly choose an I0 to transition
-	      who = (int) floor(runif(0, _undiagnosed0.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _undiagnosed0.size())); 
 	      //Branch the lineage so that we can track the state transition (but don't note the new branch)
 	      int ignore = add_leaf(_undiagnosed0[who], t, t);	   
 	      _states.push_back("I0");	   
@@ -777,7 +749,7 @@ public:
 	    
 	    {
 	      // Randomly choose an I1 to transition
-	      who = (int) floor(runif(0,_undiagnosed1.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0,_undiagnosed1.size())); 
 	      //Branch the lineage so that we can track the state transition (but don't note the new branch)
 	      int ignore = add_leaf(_undiagnosed1[who], t, t);	   
 	      _states.push_back("I1");	   
@@ -793,7 +765,7 @@ public:
 	    
 	    {
 	      // Randomly choose a J0 to transition
-	      who = (int) floor(runif(0,_diagnosed0.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0,_diagnosed0.size())); 
 	      //Branch the lineage so that we can track the state transition (but don't note the new branch)
 	      int ignore = add_leaf(_diagnosed0[who], t, t);	   
 	      _states.push_back("J0");	   
@@ -809,7 +781,7 @@ public:
 
 	    {
 	      // Randomly choose a J1 to transition
-	      who = (int) floor(runif(0,_diagnosed1.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0,_diagnosed1.size())); 
 	      //Branch the lineage so that we can track the state transition (but don't note the new branch)
 	      int ignore = add_leaf(_diagnosed1[who], t, t);	   
 	      _states.push_back("J1");	   
@@ -826,14 +798,15 @@ public:
 
 	    {
 	      // Randomly choose an I0 to diagnose
-	      who = (int) floor(runif(0, _undiagnosed0.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _undiagnosed0.size())); 
 	      // Update meristem lists
 	      _diagnosed0.push_back(_undiagnosed0[who]);
 	      remove_meristem(_undiagnosed0, who);						
 	      //Simulate a sample for that diagnosed individual with probability psequence
-	      double p = runif(0,1);
+	      double p = gsl_runif(rngptr, 0,1);
 	      if(p < params["psequence"]) {
-		_seqs.push_back(simulate_sequence(_diagnosed0.back(),
+		_seqs.push_back(simulate_sequence(rngptr, 
+						  _diagnosed0.back(),
 						  nlocus,
 						  t,
 						  params));
@@ -857,14 +830,15 @@ public:
 	    
 	    {
 	      // Randomly choose an I1 to diagnose
-	      who = (int) floor(runif(0,_undiagnosed1.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0,_undiagnosed1.size())); 
 	      // Update meristem lists
 	      _diagnosed1.push_back(_undiagnosed1[who]);
 	      remove_meristem(_undiagnosed1, who);						
 	      //Simulate a sample for that diagnosed individual with probability psequence
-	      double p = runif(0,1);
+	      double p = gsl_runif(rngptr, 0,1);
 	      if(p < params["psequence"]) {
-		_seqs.push_back(simulate_sequence(_diagnosed1.back(),
+		_seqs.push_back(simulate_sequence(rngptr, 
+						  _diagnosed1.back(),
 						  nlocus,
 						  t,
 						  params));
@@ -887,14 +861,15 @@ public:
 	    
 	    {
 	      // Randomly choose an I2 to diagnose
-	      who = (int) floor(runif(0, _undiagnosed2.size())); 
+	      who = (int) floor(gsl_runif(rngptr, 0, _undiagnosed2.size())); 
 	      // Update meristem lists
 	      _diagnosed2.push_back(_undiagnosed2[who]);
 	      remove_meristem(_undiagnosed2, who);						
 	      //Simulate a sample for that diagnosed individual with probability psequence
-	      double p = runif(0,1);
+	      double p = gsl_runif(rngptr, 0, 1);
 	      if(p < params["psequence"]) {
-		_seqs.push_back(simulate_sequence(_diagnosed2.back(),
+		_seqs.push_back(simulate_sequence(rngptr, 
+						  _diagnosed2.back(),
 						  nlocus,
 						  t,
 						  params));

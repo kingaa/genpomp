@@ -1,4 +1,6 @@
-OBJECTS = basenode.o node.o gnode.o substmodel.o peel.o userUnif.o RngStream.o io.o reduceSeqs.o 
+OBJECTS = basenode.o node.o gnode.o substmodel.o peel.o 
+OBJECTS += userUnif.o RngStream.o io.o reduceSeqs.o 
+OBJECTS += constants.o beta.o exponential.o gamma.o gausszig.o gsl_unif.o
 INCLUDEDIRS = $(shell R CMD config --cppflags) $(shell pkg-config --cflags libRmath libR) 
 INCLUDEDIRS += -I. #-I../../src/models/$(usermodelDirectory)
 #INCLUDEDIRS += -I$(MKL_INC)
