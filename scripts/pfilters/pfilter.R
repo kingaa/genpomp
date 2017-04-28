@@ -1,16 +1,16 @@
 
 ##80############################################################################
-## This is a script for running n particle filters over simulated data #########
+## This is a script for running n particle filters #############################
 ## The usage is displayed when not passing the correct number of parameters ####
 ##80############################################################################
 
 require(digest)
+require(docopt)
 
-"This script runs iterated filtering
-Usage: pfilter2.R --data_file=<dat> --usermodel_dir=<usermodeldir> --params_file=<par> --result_dir=<dest> --n_reps=<nreps> --n_threads=<nthreads> --n_nested=<nnested> --n_branch_samples=<nbranchsamples> --n_particles=<nparticles> --environment=<environment> [--remove_invariant_sites --save_internals --reproducible] [PARAMS]...
+"This script runs the particle filter
+Usage: pfilter.R --data_file=<dat> --usermodel_dir=<usermodeldir> --params_file=<par> --result_dir=<dest> --n_reps=<nreps> --n_threads=<nthreads> --n_nested=<nnested> --n_branch_samples=<nbranchsamples> --n_particles=<nparticles> [--remove_invariant_sites --save_internals] [PARAMS]...
 " -> doc
 
-library(docopt)
 opt <- docopt::docopt(doc)
 
 ## Read in the parameters file
@@ -25,14 +25,8 @@ source('../Rfunctions/textParseFunctions.R')
 source('../Rfunctions/initialConditions.R')
 
 ## Build executable
-#tmp_dir <- "debug"
 tmp_dir <- tempdir()
 usermodel_dir <- file.path("../../../src/models", opt$usermodel_dir)
-if(opt$reproducible) {
-  Sys.setenv(CMD_LINE_FLAGS='-DREPRODUCIBLE')
-} else {
-  Sys.unsetenv('CMD_LINE_FLAGS')  
-}
 makeExecutable('pfilter', mainfiledir = "../../../standalone", tmpdir = tmp_dir, srcdir = "../../../src",
                usermodelDirectory = usermodel_dir)
 
@@ -103,12 +97,5 @@ for(i in 1:opt$n_reps){
   ## Save results, parameters, git commit info and this script to an Rdata file
   master_filename <- file.path(rep_resdir, "pfilter.Rdata")
   save(list = c('runtime', 'params', 'pf_runscript', 'pf_unique_id',
-                'pf_gitcommit', 'environment', 'condlogliks'), file = master_filename)
-  
-  ## Save file for comparing likelihoods
-  #see_filename <- file.path(rep_resdir, 'see.R')
-  #writeLines(text = 'load(\'pfilter.Rdata\') 
-  #                   \ncondlogliks$sum <- condlogliks$hazard + condlogliks$p_no_diagnosis 
-  #                   \nprint(condlogliks) \n',
-  #           con = see_filename)
+                'pf_gitcommit', 'condlogliks'), file = master_filename)
 }

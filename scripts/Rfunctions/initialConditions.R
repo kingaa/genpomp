@@ -44,8 +44,6 @@ getCounts <- function(props, sumJ){
 ## and based on all rates into and out of compartments known
 ## This approach does not attempt to be self consistent with the epsilons
 
-library(deSolve)
-
 ## Specify the model
 model <- function(elapsed_time, y, params){
   with(as.list(c(y, params)), {

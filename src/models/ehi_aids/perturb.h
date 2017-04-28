@@ -33,7 +33,7 @@ class Perturb : public AbstractPerturb
   }
 
   // Function to perturb parameters (written by the user)
-  void perturb_parameters(map<string, double> & params, double alpha) {
+  void perturb_parameters(gsl_rng *rngptr, map<string, double> & params, double alpha) {
     // Perturb all 'independent' parameters (that is, parameters that do not
     // need to be perturbed jointly
     double sd;
@@ -41,19 +41,19 @@ class Perturb : public AbstractPerturb
       // Cool the standard deviation
       sd = alpha * iterator->second;
       // Perturb and write over old parameter value
-      params[iterator->first] *= rlnorm(-(sd * sd)/2,sd);
+      params[iterator->first] *= gsl_ran_lognormal(rngptr, -(sd * sd)/2, sd);
     }
   }
   
   //Function to perturb inital value parameters (written by the user)
-  void perturb_initial_value_parameters(map<string, double> & params, double alpha){
+  void perturb_initial_value_parameters(gsl_rng *rngptr, map<string, double> & params, double alpha){
     // Perturb the initial value parameters
     double sd;
     for(iter_type iterator = ivp_rw_sds.begin(); iterator != ivp_rw_sds.end(); iterator++) {    
       // Cool the standard deviation
       sd = alpha * iterator->second;
       // Perturb and write over old parameter value
-      params[iterator->first] *= rlnorm(-(sd * sd)/2,sd);
+      params[iterator->first] *= gsl_ran_lognormal(rngptr, -(sd * sd)/2, sd);
     }
   }
 
